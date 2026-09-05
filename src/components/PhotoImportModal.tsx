@@ -21,6 +21,7 @@ import {
   Calendar,
   User,
   Fuel,
+  Contrast,
 } from 'lucide-react';
 import { FuelCode, NozzleData, ExtraEntry, ShiftInfo } from '../types';
 import { FUEL_PRODUCTS } from '../constants/fuels';
@@ -326,6 +327,47 @@ export const PhotoImportModal: React.FC<PhotoImportModalProps> = ({
         dataUrl: rotated,
       });
       setParsedResult(null);
+    };
+    img.src = loadedFile.dataUrl;
+  };
+
+  // Enhance contrast & sharpening for faint receipts / handwritten carbon copies
+  const handleEnhanceContrast = () => {
+    if (!loadedFile || loadedFile.isPdf || !loadedFile.dataUrl) return;
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.drawImage(img, 0, 0);
+
+      try {
+        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const d = imgData.data;
+        const contrast = 1.35; // +35% contrast boost
+        const factor = (259 * (contrast * 100 + 255)) / (255 * (259 - contrast * 100));
+
+        for (let i = 0; i < d.length; i += 4) {
+          // Convert to high-contrast grayscale for sharper OCR
+          const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+          const enhanced = Math.min(255, Math.max(0, factor * (gray - 128) + 128));
+          d[i] = enhanced;
+          d[i + 1] = enhanced;
+          d[i + 2] = enhanced;
+        }
+        ctx.putImageData(imgData, 0, 0);
+
+        const enhancedDataUrl = canvas.toDataURL('image/jpeg', 0.95);
+        setLoadedFile({
+          ...loadedFile,
+          dataUrl: enhancedDataUrl,
+        });
+        setParsedResult(null);
+      } catch (err) {
+        console.warn('Falha ao aplicar filtro de contraste:', err);
+      }
     };
     img.src = loadedFile.dataUrl;
   };
@@ -811,14 +853,25 @@ export const PhotoImportModal: React.FC<PhotoImportModalProps> = ({
 
                 <div className="flex items-center gap-2">
                   {!loadedFile.isPdf && (
-                    <button
-                      type="button"
-                      onClick={handleRotateImage}
-                      title="Girar foto 90°"
-                      className="text-xs text-slate-600 hover:text-amber-700 flex items-center gap-1 bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs cursor-pointer"
-                    >
-                      <RotateCw className="w-3.5 h-3.5 text-slate-500" /> Girar 90°
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={handleEnhanceContrast}
+                        title="Aumentar contraste e nitidez para melhorar a leitura de recibos ou fotos escuras"
+                        className="text-xs text-slate-600 hover:text-amber-700 flex items-center gap-1 bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs cursor-pointer"
+                      >
+                        <Contrast className="w-3.5 h-3.5 text-slate-500" /> Realçar Contraste
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleRotateImage}
+                        title="Girar foto 90°"
+                        className="text-xs text-slate-600 hover:text-amber-700 flex items-center gap-1 bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs cursor-pointer"
+                      >
+                        <RotateCw className="w-3.5 h-3.5 text-slate-500" /> Girar 90°
+                      </button>
+                    </>
                   )}
 
                   <button

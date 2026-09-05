@@ -89,49 +89,54 @@ async function startServer() {
         finalMimeType = determinedMimeType;
       }
 
-      const prompt = `Você é um assistente especialista em leitura e auditoria de fechamento de caixa de postos de combustíveis no Brasil.
-Analise o documento ou imagem fornecida (pode ser: documento PDF de fechamento de caixa impresso/digital, relatório de automação Linx/Companytec/PostoGestor, folha de fechamento física em papel/caderno, visor de bomba de combustível ou cupom térmico).
+      const prompt = `Você é um assistente especialista de alta precisão em leitura e auditoria de fechamento de caixa de postos de combustíveis no Brasil.
+Analise detalhadamente o documento ou imagem fornecida. Pode ser:
+1. Folha de fechamento de caixa impressa ou manuscrita em papel/caderno (Bicos 1 a 16, recolhimentos, conferência financeira).
+2. Relatório de automação comercial ou LMC (Linx Softbox, Petros, PostoGestor, Companytec, Viasoft, EzTech, etc.).
+3. Foto de visor/display eletrônico ou contador mecânico de bomba de combustível (Totalizador em Litros, R$ ou volume).
+4. Cupom térmico POS/TEF ou resumo de encerrantes emitido pela impressora do posto.
 
 ${
   isPreviousShift
-    ? 'ATENÇÃO ESPECIAL: O usuário está importando um FECHAMENTO ANTERIOR (do turno anterior ou dia anterior). Sua prioridade máxima é extrair com precisão os ENCERRANTES DE FECHAMENTO (ou leitura final) de cada um dos Bicos 01 a 16 da folha anterior, pois esses valores serão transferidos para os Encerrantes de Abertura do novo turno.'
-    : 'OBJETIVO: Extrair todos os dados possíveis para preencher o fechamento de caixa do posto (Bicos de 1 a 16, preços, recolhimentos e apuração financeira).'
+    ? 'ATENÇÃO ESPECIAL (TRANSIÇÃO DE TURNO ANTERIOR): O usuário está enviando o fechamento do TURNO ANTERIOR. Sua prioridade máxima é extrair com precisão absoluta os ENCERRANTES FINAIS / FECHAMENTO de cada um dos Bicos 1 a 16 da folha anterior, pois esses valores serão transferidos para os Encerrantes de Abertura do novo turno.'
+    : 'OBJETIVO: Extrair todos os dados possíveis para preencher o fechamento de caixa do posto (Bicos de 1 a 16, preços, recolhimentos linha 17+ e apuração financeira).'
 }
 
-PRODUTOS VÁLIDOS (use exatamente esses códigos):
-- "ETANOL": Etanol Comum / Álcool / AEAC / Hidratado
-- "G_COM": Gasolina Comum / GC / Gas. Comum
-- "G_ADIT": Gasolina Aditivada / GA / G. Adit / V-Power / Grid / DT Clean / Octapro
-- "D_S10": Diesel S-10 / S10 / Diesel S10 Aditivado
-- "D_COM": Diesel S-500 / Comum / D500 / D Comum
+PADRONIZAÇÃO DOS PRODUTOS DE COMBUSTÍVEL:
+Use ESTRITAMENTE um destes 5 códigos para "productCode":
+- "ETANOL": Etanol Hidratado / Álcool / AEAC / Etanol Comum
+- "G_COM": Gasolina Comum / GC / Gas. Comum / Gasolina C
+- "G_ADIT": Gasolina Aditivada / GA / G. Adit / V-Power / Grid / DT Clean / Octapro / Shell V-Power / Ipiranga Dt Clean / Petrobras Grid
+- "D_S10": Diesel S-10 / S10 / Diesel S-10 Aditivado / Evolux S10
+- "D_COM": Diesel S-500 / S500 / Comum / D500 / Diesel Comum
 
 REGRAS DE EXTRAÇÃO:
-1. "detectedNozzles": Array com os bicos identificados na imagem/documento (1 a 16).
-   - "nozzleNumber": Número inteiro do bico entre 1 e 16 (ex: Bico 01 -> 1, Bico 16 -> 16).
-   - "productCode": Um dos 5 códigos acima ("ETANOL", "G_COM", "G_ADIT", "D_S10", "D_COM") ou null se não especificado.
-   - "openingMeter": Encerrante inicial / Abertura como string numérica limpa (ex: "42100.50"). Converta vírgula para ponto e remova pontos de milhar.
-   - "closingMeter": Encerrante final / Fechamento / Leitura atual como string numérica limpa (ex: "42350.20").
-   - "calibrationLiters": Aferição em litros se indicada (ex: "0" ou "20"), ou null.
-   - "unitPrice": Preço unitário por litro em reais (número float, ex: 6.33), se visível.
+1. "detectedNozzles": Array contendo todos os bicos identificados no documento/foto (números de 1 a 16).
+   - "nozzleNumber": Número inteiro do bico entre 1 e 16 (ex: se na foto diz "Bico 04" ou "B04", nozzleNumber = 4). Se for foto de bomba com Lado A / Lado B, deduza o bico correspondente.
+   - "productCode": Código do produto ("ETANOL", "G_COM", "G_ADIT", "D_S10", "D_COM") ou null se não identificado.
+   - "openingMeter": Encerrante de Abertura / Inicial como string numérica limpa (ex: "42100.50"). Converta vírgula decimal para ponto e remova pontos de milhar.
+   - "closingMeter": Encerrante de Fechamento / Final / Leitura Atual como string numérica limpa (ex: "42350.20"). Se a foto for de um display individual com apenas 1 valor de encerrante, preencha no "closingMeter".
+   - "calibrationLiters": Aferição de teste de bomba em litros (ex: "0" ou "20" ou "40").
+   - "unitPrice": Preço por litro em reais (número float, ex: 6.33), se anotado.
 
-2. "prices": Preços por litro de cada combustível se visíveis no documento (ex: { "ETANOL": 4.33, "G_COM": 6.33, "G_ADIT": 6.33, "D_S10": 6.99, "D_COM": 6.43 }).
+2. "prices": Tabela de preços por litro se visível (ex: { "ETANOL": 4.33, "G_COM": 6.33, "G_ADIT": 6.33, "D_S10": 6.99, "D_COM": 6.43 }).
 
-3. "extraEntries": Array de recolhimentos ou itens extras da linha 17+ (ex: Arla 32, Troca de Óleo, Loja de Conveniência, Sangria). Cada item com { "description": string, "value": string numérica limpa }.
+3. "extraEntries": Array de recolhimentos ou itens extras da Linha 17+ (ex: Arla 32, Troca de Óleo / Lubrificantes, Filtros, Loja de Conveniência, Vales / Adiantamentos, Despesas / Sangrias, Faturado). Cada item com { "description": string, "value": string numérica limpa }.
 
-4. "stationInfo": Dados do cabeçalho da folha:
-   - "stationName": Nome do posto ou razão social (string ou null)
-   - "cashierName": Nome do frentista, operador ou caixa (string ou null)
-   - "date": Data no formato "YYYY-MM-DD" se legível (ou null)
-   - "shiftType": "Manhã", "Tarde", "Noite" ou "Geral" se legível (ou null)
+4. "stationInfo":
+   - "stationName": Nome do posto ou bandeira (ex: "Posto Petrobras", "Posto Ipiranga", "Auto Posto...") ou null
+   - "cashierName": Nome do frentista, operador de pista ou caixa (ou null)
+   - "date": Data no formato "YYYY-MM-DD" (ex: "2026-09-05") ou null
+   - "shiftType": "Manhã", "Tarde", "Noite" ou "Geral" (ou null)
 
-5. "financialConference": Valores de conferência/apuração financeira se anotados:
-   - "cashAmount": Dinheiro em espécie contado (string numérica ou null)
-   - "cardsAmount": Cartões de débito/crédito (string numérica ou null)
-   - "pixAmount": PIX / Transferências (string numérica ou null)
-   - "otherAmount": Outros recebimentos / faturado (string numérica ou null)
-   - "notes": Observações, justificativas de quebra ou fundo de troco (string ou null)
+5. "financialConference": Valores da apuração financeira se declarados na folha:
+   - "cashAmount": Dinheiro em espécie contado na gaveta (string numérica limpa)
+   - "cardsAmount": Total de cartões de débito + crédito somados
+   - "pixAmount": PIX ou transferências
+   - "otherAmount": Cheques, vales ou faturado
+   - "notes": Observações, fundo de troco anotado ou justificativa de quebra
 
-6. "observations": Breve resumo explicativo em português do que foi reconhecido com sucesso no documento/foto.
+6. "observations": Resumo conciso em português do que foi lido e auditado com sucesso.
 
 FORMATO DE RESPOSTA (retorne ESTRITAMENTE o JSON estruturado abaixo, sem markdown):
 {
@@ -170,8 +175,8 @@ FORMATO DE RESPOSTA (retorne ESTRITAMENTE o JSON estruturado abaixo, sem markdow
         },
       };
 
-      // Try with primary model, retry with fallback models if 503 / high-demand occurs
-      const modelsToTry = ['gemini-3.8-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest'];
+      // Try with official recommended models: gemini-2.5-flash (primary multimodal), gemini-2.5-pro, gemini-2.5-flash-lite
+      const modelsToTry = ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.5-flash-lite'];
       let response: any = null;
       let lastError: any = null;
 
@@ -188,7 +193,7 @@ FORMATO DE RESPOSTA (retorne ESTRITAMENTE o JSON estruturado abaixo, sem markdow
             ],
             config: {
               responseMimeType: 'application/json',
-              temperature: 0.1,
+              temperature: 0.0,
             },
           });
           if (response && response.text) {
@@ -198,7 +203,7 @@ FORMATO DE RESPOSTA (retorne ESTRITAMENTE o JSON estruturado abaixo, sem markdow
           lastError = callErr;
           console.warn(`Tentativa com modelo ${modelName} falhou:`, callErr?.message || callErr);
           if (attempt < modelsToTry.length - 1) {
-            await new Promise((resolve) => setTimeout(resolve, 1000));
+            await new Promise((resolve) => setTimeout(resolve, 800));
           }
         }
       }
@@ -293,37 +298,74 @@ FORMATO DE RESPOSTA (retorne ESTRITAMENTE o JSON estruturado abaixo, sem markdow
         return null;
       }
 
-      // Sanitize detected nozzles
+      // Sanitize detected nozzles with deduplication & sorting (1 to 16)
       if (Array.isArray(parsedData.detectedNozzles)) {
-        const sanitizedNozzles: any[] = [];
+        const nozzleMap = new Map<number, any>();
         for (const rawNozzle of parsedData.detectedNozzles) {
           if (!rawNozzle) continue;
 
           // Extract nozzle number from number or string (e.g. "Bico 01" -> 1)
           let nozzleNum: number | null = null;
           if (typeof rawNozzle.nozzleNumber === 'number' && rawNozzle.nozzleNumber >= 1 && rawNozzle.nozzleNumber <= 16) {
-            nozzleNum = rawNozzle.nozzleNumber;
+            nozzleNum = Math.floor(rawNozzle.nozzleNumber);
           } else if (typeof rawNozzle.nozzleNumber === 'string') {
             const match = rawNozzle.nozzleNumber.match(/\b([1-9]|1[0-6])\b/);
             if (match) nozzleNum = parseInt(match[1], 10);
           } else if (typeof rawNozzle.id === 'number' && rawNozzle.id >= 1 && rawNozzle.id <= 16) {
-            nozzleNum = rawNozzle.id;
+            nozzleNum = Math.floor(rawNozzle.id);
           }
 
           if (nozzleNum && nozzleNum >= 1 && nozzleNum <= 16) {
-            sanitizedNozzles.push({
-              nozzleNumber: nozzleNum,
-              productCode: normalizeFuelCode(rawNozzle.productCode),
-              openingMeter: cleanMeterValue(rawNozzle.openingMeter),
-              closingMeter: cleanMeterValue(rawNozzle.closingMeter),
-              calibrationLiters: cleanMeterValue(rawNozzle.calibrationLiters) || '0',
-              unitPrice: typeof rawNozzle.unitPrice === 'number' ? rawNozzle.unitPrice : parseFloat(cleanMeterValue(rawNozzle.unitPrice)) || undefined,
-            });
+            const opVal = cleanMeterValue(rawNozzle.openingMeter);
+            const clVal = cleanMeterValue(rawNozzle.closingMeter);
+            const calVal = cleanMeterValue(rawNozzle.calibrationLiters) || '0';
+            const code = normalizeFuelCode(rawNozzle.productCode);
+            const price = typeof rawNozzle.unitPrice === 'number' ? rawNozzle.unitPrice : parseFloat(cleanMeterValue(rawNozzle.unitPrice)) || undefined;
+
+            const existing = nozzleMap.get(nozzleNum);
+            if (!existing) {
+              nozzleMap.set(nozzleNum, {
+                nozzleNumber: nozzleNum,
+                productCode: code,
+                openingMeter: opVal,
+                closingMeter: clVal,
+                calibrationLiters: calVal,
+                unitPrice: price,
+              });
+            } else {
+              // Merge if another row provides missing closing/opening
+              nozzleMap.set(nozzleNum, {
+                nozzleNumber: nozzleNum,
+                productCode: code || existing.productCode,
+                openingMeter: opVal || existing.openingMeter,
+                closingMeter: clVal || existing.closingMeter,
+                calibrationLiters: calVal !== '0' ? calVal : existing.calibrationLiters,
+                unitPrice: price || existing.unitPrice,
+              });
+            }
           }
         }
-        parsedData.detectedNozzles = sanitizedNozzles;
+
+        parsedData.detectedNozzles = Array.from(nozzleMap.values()).sort(
+          (a, b) => a.nozzleNumber - b.nozzleNumber
+        );
       } else {
         parsedData.detectedNozzles = [];
+      }
+
+      // Sanitize prices table
+      if (parsedData.prices && typeof parsedData.prices === 'object') {
+        const sanitizedPrices: Record<string, number> = {};
+        for (const [key, val] of Object.entries(parsedData.prices)) {
+          const normKey = normalizeFuelCode(key);
+          const numVal = typeof val === 'number' ? val : parseFloat(cleanMeterValue(val));
+          if (normKey && !isNaN(numVal) && numVal > 0) {
+            sanitizedPrices[normKey] = numVal;
+          }
+        }
+        parsedData.prices = sanitizedPrices;
+      } else {
+        parsedData.prices = {};
       }
 
       // Sanitize extraEntries
