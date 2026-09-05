@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { Trash2, Printer, Share2, Copy, Check, Sparkles, AlertTriangle, X, Camera } from 'lucide-react';
+import { Trash2, Printer, Share2, Copy, Check, Sparkles, AlertTriangle, X, Camera, FileText } from 'lucide-react';
 
 interface ActionToolbarProps {
   onClearForm: () => void;
   onPrint: () => void;
   onCopyWhatsApp: () => void;
   onLoadDemoData: () => void;
-  onOpenPhotoModal: () => void;
+  onOpenPhotoModal: (tab?: 'photo' | 'pdf_previous') => void;
   isCopied: boolean;
 }
 
@@ -25,13 +25,25 @@ export const ActionToolbar: React.FC<ActionToolbarProps> = ({
       <div className="bg-white border border-slate-200 rounded-2xl shadow-xs p-4 mb-8">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+            {/* Import by PDF Previous Shift Button */}
+            <button
+              id="import-pdf-previous-btn"
+              type="button"
+              onClick={() => onOpenPhotoModal('pdf_previous')}
+              title="Importar PDF ou imagem do fechamento anterior para preencher abertura dos bicos"
+              className="flex-1 sm:flex-initial text-xs font-bold text-slate-800 bg-slate-100 hover:bg-slate-200 border border-slate-300 px-3.5 py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs"
+            >
+              <FileText className="w-4 h-4 text-amber-600" />
+              <span>Importar PDF Anterior</span>
+            </button>
+
             {/* Import by Photo Button */}
             <button
               id="import-photo-btn"
               type="button"
-              onClick={onOpenPhotoModal}
+              onClick={() => onOpenPhotoModal('photo')}
               title="Tirar foto ou carregar imagem para preenchimento automático via IA"
-              className="flex-1 sm:flex-initial text-xs font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 px-3.5 py-2.5 rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
+              className="flex-1 sm:flex-initial text-xs font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 px-3.5 py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs"
             >
               <Camera className="w-4 h-4 text-amber-600" />
               <span>Importar por Foto</span>
@@ -43,7 +55,7 @@ export const ActionToolbar: React.FC<ActionToolbarProps> = ({
               type="button"
               onClick={onLoadDemoData}
               title="Preencher com leituras de exemplo para testar os cálculos"
-              className="flex-1 sm:flex-initial text-xs font-medium text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 px-3.5 py-2 rounded-xl flex items-center justify-center gap-2 transition-colors cursor-pointer"
+              className="flex-1 sm:flex-initial text-xs font-medium text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 px-3 py-2 rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
             >
               <Sparkles className="w-3.5 h-3.5 text-amber-600" />
               <span>Dados Exemplo</span>
@@ -54,7 +66,7 @@ export const ActionToolbar: React.FC<ActionToolbarProps> = ({
               id="clear-form-btn"
               type="button"
               onClick={() => setShowClearConfirm(true)}
-              className="flex-1 sm:flex-initial text-xs font-medium text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-3.5 py-2 rounded-xl flex items-center justify-center gap-2 transition-colors cursor-pointer"
+              className="flex-1 sm:flex-initial text-xs font-medium text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-3 py-2 rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
             >
               <Trash2 className="w-3.5 h-3.5" />
               <span>Limpar</span>

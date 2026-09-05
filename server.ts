@@ -22,14 +22,22 @@ async function startServer() {
     res.json({ status: 'ok', time: new Date().toISOString() });
   });
 
-  // OCR / Image extraction endpoint
+  // OCR / Image and PDF extraction endpoint
   app.post('/api/scan-photo', async (req, res) => {
     try {
-      const { imageBase64, mimeType = 'image/jpeg', scanMode } = req.body;
+      const {
+        imageBase64,
+        fileBase64,
+        mimeType: rawMimeType,
+        isPreviousShift = false,
+        scanMode,
+      } = req.body;
 
-      if (!imageBase64) {
+      const inputBase64 = fileBase64 || imageBase64;
+
+      if (!inputBase64) {
         return res.status(400).json({
-          error: 'Nenhuma imagem foi enviada. Forneça uma foto ou captura de tela.',
+          error: 'Nenhum arquivo ou imagem foi enviado. Forneça uma foto ou documento PDF.',
         });
       }
 
@@ -50,26 +58,39 @@ async function startServer() {
       });
 
       // Clean base64 data prefix and detect MIME type
-      let determinedMimeType = mimeType || 'image/jpeg';
-      let cleanedBase64 = imageBase64;
+      let determinedMimeType = rawMimeType || 'image/jpeg';
+      let cleanedBase64 = inputBase64;
 
-      if (imageBase64.startsWith('data:')) {
-        const mimeMatch = imageBase64.match(/^data:([^;]+);base64,/);
+      if (inputBase64.startsWith('data:')) {
+        const mimeMatch = inputBase64.match(/^data:([^;]+);base64,/);
         if (mimeMatch && mimeMatch[1]) {
-          determinedMimeType = mimeMatch[1];
+          determinedMimeType = mimeMatch[1].toLowerCase();
         }
-        cleanedBase64 = imageBase64.replace(/^data:[^;]+;base64,/, '');
+        cleanedBase64 = inputBase64.replace(/^data:[^;]+;base64,/, '');
+      }
+
+      // Ensure valid MIME type for Gemini
+      let finalMimeType = 'image/jpeg';
+      if (determinedMimeType.includes('pdf')) {
+        finalMimeType = 'application/pdf';
+      } else if (determinedMimeType.includes('png')) {
+        finalMimeType = 'image/png';
+      } else if (determinedMimeType.includes('webp')) {
+        finalMimeType = 'image/webp';
+      } else if (determinedMimeType.includes('gif')) {
+        finalMimeType = 'image/gif';
+      } else if (determinedMimeType.startsWith('image/')) {
+        finalMimeType = determinedMimeType;
       }
 
       const prompt = `Você é um assistente especialista em leitura e auditoria de fechamento de caixa de postos de combustíveis no Brasil.
-Analise a foto fornecida com atenção máxima aos números e textos.
-A foto pode ser:
-- Uma folha de fechamento de caixa impressa ou manuscrita em papel/caderno.
-- Um cupom fiscal, filipeta térmica de automação (Companytec, Linx, EZTech, etc.).
-- O visor digital/mecânico de uma bomba de combustível individual (ex: Bico 01, Bico 05).
-- Uma anotação de turno com leituras de encerrantes e conferência de valores.
+Analise o documento ou imagem fornecida (pode ser: documento PDF de fechamento de caixa impresso/digital, relatório de automação Linx/Companytec/PostoGestor, folha de fechamento física em papel/caderno, visor de bomba de combustível ou cupom térmico).
 
-OBJETIVO: Extrair todos os dados possíveis para preencher o fechamento de caixa do posto (Bicos de 1 a 16).
+${
+  isPreviousShift
+    ? 'ATENÇÃO ESPECIAL: O usuário está importando um FECHAMENTO ANTERIOR (do turno anterior ou dia anterior). Sua prioridade máxima é extrair com precisão os ENCERRANTES DE FECHAMENTO (ou leitura final) de cada um dos Bicos 01 a 16 da folha anterior, pois esses valores serão transferidos para os Encerrantes de Abertura do novo turno.'
+    : 'OBJETIVO: Extrair todos os dados possíveis para preencher o fechamento de caixa do posto (Bicos de 1 a 16, preços, recolhimentos e apuração financeira).'
+}
 
 PRODUTOS VÁLIDOS (use exatamente esses códigos):
 - "ETANOL": Etanol Comum / Álcool / AEAC / Hidratado
@@ -79,15 +100,15 @@ PRODUTOS VÁLIDOS (use exatamente esses códigos):
 - "D_COM": Diesel S-500 / Comum / D500 / D Comum
 
 REGRAS DE EXTRAÇÃO:
-1. "detectedNozzles": Array com os bicos identificados na imagem.
-   - "nozzleNumber": Número inteiro do bico entre 1 e 16 (ex: Bico 01 -> 1, Bico 16 -> 16). Se for foto de uma bomba específica, retorne apenas o bico mostrado.
+1. "detectedNozzles": Array com os bicos identificados na imagem/documento (1 a 16).
+   - "nozzleNumber": Número inteiro do bico entre 1 e 16 (ex: Bico 01 -> 1, Bico 16 -> 16).
    - "productCode": Um dos 5 códigos acima ("ETANOL", "G_COM", "G_ADIT", "D_S10", "D_COM") ou null se não especificado.
    - "openingMeter": Encerrante inicial / Abertura como string numérica limpa (ex: "42100.50"). Converta vírgula para ponto e remova pontos de milhar.
    - "closingMeter": Encerrante final / Fechamento / Leitura atual como string numérica limpa (ex: "42350.20").
    - "calibrationLiters": Aferição em litros se indicada (ex: "0" ou "20"), ou null.
    - "unitPrice": Preço unitário por litro em reais (número float, ex: 6.33), se visível.
 
-2. "prices": Preços por litro de cada combustível se visíveis na foto (ex: { "ETANOL": 4.33, "G_COM": 6.33, "G_ADIT": 6.33, "D_S10": 6.99, "D_COM": 6.43 }).
+2. "prices": Preços por litro de cada combustível se visíveis no documento (ex: { "ETANOL": 4.33, "G_COM": 6.33, "G_ADIT": 6.33, "D_S10": 6.99, "D_COM": 6.43 }).
 
 3. "extraEntries": Array de recolhimentos ou itens extras da linha 17+ (ex: Arla 32, Troca de Óleo, Loja de Conveniência, Sangria). Cada item com { "description": string, "value": string numérica limpa }.
 
@@ -104,7 +125,7 @@ REGRAS DE EXTRAÇÃO:
    - "otherAmount": Outros recebimentos / faturado (string numérica ou null)
    - "notes": Observações, justificativas de quebra ou fundo de troco (string ou null)
 
-6. "observations": Breve resumo explicativo em português do que foi reconhecido com sucesso na foto.
+6. "observations": Breve resumo explicativo em português do que foi reconhecido com sucesso no documento/foto.
 
 FORMATO DE RESPOSTA (retorne ESTRITAMENTE o JSON estruturado abaixo, sem markdown):
 {
@@ -136,9 +157,9 @@ FORMATO DE RESPOSTA (retorne ESTRITAMENTE o JSON estruturado abaixo, sem markdow
   "observations": "string"
 }`;
 
-      const imagePart = {
+      const filePart = {
         inlineData: {
-          mimeType: determinedMimeType.startsWith('image/') ? determinedMimeType : 'image/jpeg',
+          mimeType: finalMimeType,
           data: cleanedBase64,
         },
       };
@@ -156,7 +177,7 @@ FORMATO DE RESPOSTA (retorne ESTRITAMENTE o JSON estruturado abaixo, sem markdow
             contents: [
               {
                 role: 'user',
-                parts: [imagePart, { text: prompt }],
+                parts: [filePart, { text: prompt }],
               },
             ],
             config: {

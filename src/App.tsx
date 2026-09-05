@@ -62,6 +62,12 @@ export default function App() {
 
   // Photo Import Modal state
   const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
+  const [photoModalTab, setPhotoModalTab] = useState<'photo' | 'pdf_previous'>('photo');
+
+  const handleOpenPhotoModal = (tab: 'photo' | 'pdf_previous' = 'photo') => {
+    setPhotoModalTab(tab);
+    setIsPhotoModalOpen(true);
+  };
 
   // Load from localStorage on first mount
   useEffect(() => {
@@ -321,7 +327,7 @@ export default function App() {
       otherAmount?: string | null;
       notes?: string | null;
     };
-    mergeMode: 'merge' | 'replace';
+    mergeMode: 'merge' | 'replace' | 'previous_shift_transition';
   }) => {
     // 1. Update Shift Info if detected
     if (data.stationInfo) {
@@ -456,7 +462,7 @@ export default function App() {
           shift={shift}
           onUpdateShift={handleUpdateShift}
           lastSavedAt={lastSavedAt}
-          onOpenPhotoModal={() => setIsPhotoModalOpen(true)}
+          onOpenPhotoModal={handleOpenPhotoModal}
         />
 
         {/* Price Configuration Header Bar */}
@@ -569,14 +575,15 @@ export default function App() {
           onPrint={handlePrint}
           onCopyWhatsApp={handleCopyWhatsApp}
           onLoadDemoData={handleLoadDemoData}
-          onOpenPhotoModal={() => setIsPhotoModalOpen(true)}
+          onOpenPhotoModal={handleOpenPhotoModal}
           isCopied={isCopied}
         />
       </div>
 
-      {/* Photo Import AI Modal */}
+      {/* Photo / PDF Import AI Modal */}
       <PhotoImportModal
         isOpen={isPhotoModalOpen}
+        initialTab={photoModalTab}
         onClose={() => setIsPhotoModalOpen(false)}
         onApplyData={handleApplyPhotoData}
       />

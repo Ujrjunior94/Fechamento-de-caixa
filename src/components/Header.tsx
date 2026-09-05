@@ -1,12 +1,12 @@
 import React from 'react';
-import { Fuel, Calendar, Clock, User, Building, CheckCircle2, Camera } from 'lucide-react';
+import { Fuel, Calendar, Clock, User, Building, CheckCircle2, Camera, FileText } from 'lucide-react';
 import { ShiftInfo } from '../types';
 
 interface HeaderProps {
   shift: ShiftInfo;
   onUpdateShift: (field: keyof ShiftInfo, value: string) => void;
   lastSavedAt: string | null;
-  onOpenPhotoModal?: () => void;
+  onOpenPhotoModal?: (defaultTab?: 'photo' | 'pdf_previous') => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -38,16 +38,29 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Action button & autosave status indicator */}
         <div className="flex items-center gap-2 self-start md:self-center flex-wrap">
           {onOpenPhotoModal && (
-            <button
-              id="header-import-photo-btn"
-              type="button"
-              onClick={onOpenPhotoModal}
-              title="Ler bicos e encerrantes através de foto ou câmera"
-              className="flex items-center gap-1.5 text-xs font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 px-3 py-1.5 rounded-lg transition-colors cursor-pointer shadow-xs"
-            >
-              <Camera className="w-3.5 h-3.5 text-amber-600" />
-              <span>Importar por Foto</span>
-            </button>
+            <>
+              <button
+                id="header-import-pdf-btn"
+                type="button"
+                onClick={() => onOpenPhotoModal('pdf_previous')}
+                title="Importar PDF ou imagem do fechamento anterior para preencher abertura"
+                className="flex items-center gap-1.5 text-xs font-bold text-slate-800 bg-slate-100 hover:bg-slate-200 border border-slate-300 px-3 py-1.5 rounded-lg transition-colors cursor-pointer shadow-xs"
+              >
+                <FileText className="w-3.5 h-3.5 text-amber-600" />
+                <span>Importar PDF Anterior</span>
+              </button>
+
+              <button
+                id="header-import-photo-btn"
+                type="button"
+                onClick={() => onOpenPhotoModal('photo')}
+                title="Ler bicos e encerrantes através de foto ou câmera"
+                className="flex items-center gap-1.5 text-xs font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 px-3 py-1.5 rounded-lg transition-colors cursor-pointer shadow-xs"
+              >
+                <Camera className="w-3.5 h-3.5 text-amber-600" />
+                <span>Importar por Foto</span>
+              </button>
+            </>
           )}
 
           <div className="flex items-center gap-2 text-xs text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
