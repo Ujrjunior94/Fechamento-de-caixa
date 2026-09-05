@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
@@ -17,13 +18,18 @@ async function startServer() {
   app.use(express.json({ limit: '25mb' }));
   app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
+  // Favicon handler to avoid 404s
+  app.get('/favicon.ico', (req, res) => {
+    res.status(204).end();
+  });
+
   // API Healthcheck
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', time: new Date().toISOString() });
   });
 
-  // OCR / Image and PDF extraction endpoint
-  app.post('/api/scan-photo', async (req, res) => {
+  // OCR / Image and PDF extraction endpoint (supports both /api/scan-photo and /api/scan-image)
+  app.post(['/api/scan-photo', '/api/scan-photo/', '/api/scan-image', '/api/scan-image/'], async (req, res) => {
     try {
       const {
         imageBase64,
@@ -257,11 +263,35 @@ FORMATO DE RESPOSTA (retorne ESTRITAMENTE o JSON estruturado abaixo, sem markdow
       appType: 'spa',
     });
     app.use(vite.middlewares);
+
+    // Development SPA fallback for any route
+    app.use('*', async (req, res, next) => {
+      if (req.originalUrl.startsWith('/api/')) {
+        return next();
+      }
+      try {
+        const indexPath = path.resolve(__dirname, 'index.html');
+        if (fs.existsSync(indexPath)) {
+          let template = fs.readFileSync(indexPath, 'utf-8');
+          template = await vite.transformIndexHtml(req.originalUrl, template);
+          res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
+        } else {
+          next();
+        }
+      } catch (e) {
+        next(e);
+      }
+    });
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+      const indexPath = path.join(distPath, 'index.html');
+      if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath);
+      } else {
+        res.status(404).send('Página não encontrada');
+      }
     });
   }
 
