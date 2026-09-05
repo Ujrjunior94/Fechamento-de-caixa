@@ -1,5 +1,5 @@
 import React from 'react';
-import { Fuel, Calendar, Clock, User, Building, CheckCircle2, Camera, FileText } from 'lucide-react';
+import { Fuel, Calendar, Clock, User, Building, CheckCircle2, Camera, FileText, History } from 'lucide-react';
 import { ShiftInfo } from '../types';
 
 interface HeaderProps {
@@ -7,6 +7,8 @@ interface HeaderProps {
   onUpdateShift: (field: keyof ShiftInfo, value: string) => void;
   lastSavedAt: string | null;
   onOpenPhotoModal?: (defaultTab?: 'photo' | 'pdf_previous') => void;
+  onOpenHistoryModal?: () => void;
+  historyCount?: number;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -14,6 +16,8 @@ export const Header: React.FC<HeaderProps> = ({
   onUpdateShift,
   lastSavedAt,
   onOpenPhotoModal,
+  onOpenHistoryModal,
+  historyCount = 0,
 }) => {
   return (
     <header className="bg-white border-b border-slate-200 shadow-xs mb-6 rounded-2xl p-4 md:p-6">
@@ -37,6 +41,19 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Action button & autosave status indicator */}
         <div className="flex items-center gap-2 self-start md:self-center flex-wrap">
+          {onOpenHistoryModal && (
+            <button
+              id="header-history-btn"
+              type="button"
+              onClick={onOpenHistoryModal}
+              title="Abrir histórico dos últimos 30 fechamentos de caixa"
+              className="flex items-center gap-1.5 text-xs font-bold text-slate-800 bg-slate-100 hover:bg-slate-200 border border-slate-300 px-3 py-1.5 rounded-lg transition-colors cursor-pointer shadow-xs"
+            >
+              <History className="w-3.5 h-3.5 text-amber-600" />
+              <span>Histórico ({historyCount}/30)</span>
+            </button>
+          )}
+
           {onOpenPhotoModal && (
             <>
               <button

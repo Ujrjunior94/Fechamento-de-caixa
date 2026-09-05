@@ -1,7 +1,14 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { FuelCode, NozzleData, ExtraEntry, ShiftInfo, CashConference } from './types';
+import { FuelCode, NozzleData, ExtraEntry, ShiftInfo, CashConference, SavedShiftRecord } from './types';
 import { INITIAL_PRICES, createInitialNozzles } from './constants/fuels';
-import { computeOverallSummary, generateWhatsAppMessage } from './utils/formatters';
+import { computeOverallSummary, generateWhatsAppMessage, cleanMeterString } from './utils/formatters';
+import {
+  getShiftHistory,
+  saveShiftToHistory,
+  deleteShiftFromHistory,
+  clearAllHistory,
+  generateDemoHistory,
+} from './utils/historyStorage';
 import { Header } from './components/Header';
 import { PriceBar } from './components/PriceBar';
 import { NozzleTable } from './components/NozzleTable';
@@ -12,6 +19,7 @@ import { CashConferenceSection } from './components/CashConferenceSection';
 import { ActionToolbar } from './components/ActionToolbar';
 import { PrintSheet } from './components/PrintSheet';
 import { PhotoImportModal } from './components/PhotoImportModal';
+import { HistoryModal } from './components/HistoryModal';
 import { LayoutGrid, Table, Check, Smartphone, Monitor } from 'lucide-react';
 
 const STORAGE_KEY = 'posto_combustivel_fechamento_caixa_v1';
@@ -63,6 +71,11 @@ export default function App() {
   // Photo Import Modal state
   const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
   const [photoModalTab, setPhotoModalTab] = useState<'photo' | 'pdf_previous'>('photo');
+
+  // Local History state (Last 30 shifts)
+  const [historyList, setHistoryList] = useState<SavedShiftRecord[]>(() => getShiftHistory());
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [isHistorySaved, setIsHistorySaved] = useState(false);
 
   const handleOpenPhotoModal = (tab: 'photo' | 'pdf_previous' = 'photo') => {
     setPhotoModalTab(tab);
@@ -374,15 +387,15 @@ export default function App() {
               unitPrice,
               openingMeter:
                 detected.openingMeter !== undefined && detected.openingMeter !== null
-                  ? String(detected.openingMeter)
+                  ? cleanMeterString(detected.openingMeter)
                   : n.openingMeter,
               closingMeter:
                 detected.closingMeter !== undefined && detected.closingMeter !== null
-                  ? String(detected.closingMeter)
+                  ? cleanMeterString(detected.closingMeter)
                   : n.closingMeter,
               calibrationLiters:
                 detected.calibrationLiters !== undefined && detected.calibrationLiters !== null
-                  ? String(detected.calibrationLiters)
+                  ? cleanMeterString(detected.calibrationLiters)
                   : n.calibrationLiters,
             };
           }
@@ -406,7 +419,7 @@ export default function App() {
       const formattedEntries: ExtraEntry[] = data.extraEntries.map((e, idx) => ({
         id: `extra-ai-${Date.now()}-${idx}`,
         description: e.description,
-        value: String(e.value),
+        value: cleanMeterString(e.value),
       }));
 
       if (data.mergeMode === 'replace') {
@@ -423,18 +436,23 @@ export default function App() {
         cashAmount:
           data.financialConference?.cashAmount !== undefined &&
           data.financialConference?.cashAmount !== null
-            ? String(data.financialConference.cashAmount)
+            ? cleanMeterString(data.financialConference.cashAmount)
             : prev.cashAmount,
         cardsAmount:
           data.financialConference?.cardsAmount !== undefined &&
           data.financialConference?.cardsAmount !== null
-            ? String(data.financialConference.cardsAmount)
+            ? cleanMeterString(data.financialConference.cardsAmount)
             : prev.cardsAmount,
         pixAmount:
           data.financialConference?.pixAmount !== undefined &&
           data.financialConference?.pixAmount !== null
-            ? String(data.financialConference.pixAmount)
+            ? cleanMeterString(data.financialConference.pixAmount)
             : prev.pixAmount,
+        otherAmount:
+          data.financialConference?.otherAmount !== undefined &&
+          data.financialConference?.otherAmount !== null
+            ? cleanMeterString(data.financialConference.otherAmount)
+            : prev.otherAmount,
         notes:
           data.financialConference?.notes !== undefined &&
           data.financialConference?.notes !== null
@@ -443,6 +461,64 @@ export default function App() {
       }));
     }
   };
+
+  // --- Local History Handlers (Max 30 shifts) ---
+  const handleSaveShiftToHistory = useCallback(() => {
+    const { list } = saveShiftToHistory({
+      shift,
+      prices,
+      nozzles,
+      extraEntries,
+      conference,
+      summary,
+    });
+    setHistoryList(list);
+    setIsHistorySaved(true);
+    setTimeout(() => setIsHistorySaved(false), 3000);
+  }, [shift, prices, nozzles, extraEntries, conference, summary]);
+
+  const handleLoadRecordToActiveShift = useCallback((record: SavedShiftRecord) => {
+    setShift(record.shift);
+    setPrices(record.prices);
+    setNozzles(record.nozzles);
+    setExtraEntries(record.extraEntries);
+    setConference(record.conference);
+  }, []);
+
+  const handleApplyAsOpeningMeters = useCallback((record: SavedShiftRecord) => {
+    // Transfer historic closing meters as new opening meters
+    setNozzles((prev) =>
+      prev.map((n) => {
+        const histNozzle = record.nozzles.find((hn) => hn.id === n.id);
+        if (histNozzle && histNozzle.closingMeter) {
+          return {
+            ...n,
+            productCode: histNozzle.productCode || n.productCode,
+            unitPrice: record.prices[histNozzle.productCode] ?? n.unitPrice,
+            openingMeter: histNozzle.closingMeter,
+            calibrationLiters: '0',
+            closingMeter: '',
+          };
+        }
+        return n;
+      })
+    );
+  }, []);
+
+  const handleDeleteHistoryRecord = useCallback((id: string) => {
+    const updated = deleteShiftFromHistory(id);
+    setHistoryList(updated);
+  }, []);
+
+  const handleClearAllHistory = useCallback(() => {
+    clearAllHistory();
+    setHistoryList([]);
+  }, []);
+
+  const handleGenerateDemoHistory = useCallback(() => {
+    const demo = generateDemoHistory();
+    setHistoryList(demo);
+  }, []);
 
   return (
     <div className="min-h-screen bg-slate-50/70 pb-20 text-slate-800">
@@ -463,6 +539,8 @@ export default function App() {
           onUpdateShift={handleUpdateShift}
           lastSavedAt={lastSavedAt}
           onOpenPhotoModal={handleOpenPhotoModal}
+          onOpenHistoryModal={() => setIsHistoryModalOpen(true)}
+          historyCount={historyList.length}
         />
 
         {/* Price Configuration Header Bar */}
@@ -576,7 +654,10 @@ export default function App() {
           onCopyWhatsApp={handleCopyWhatsApp}
           onLoadDemoData={handleLoadDemoData}
           onOpenPhotoModal={handleOpenPhotoModal}
+          onSaveToHistory={handleSaveShiftToHistory}
+          onOpenHistory={() => setIsHistoryModalOpen(true)}
           isCopied={isCopied}
+          isHistorySaved={isHistorySaved}
         />
       </div>
 
@@ -586,6 +667,19 @@ export default function App() {
         initialTab={photoModalTab}
         onClose={() => setIsPhotoModalOpen(false)}
         onApplyData={handleApplyPhotoData}
+      />
+
+      {/* Local History Modal (Last 30 Shifts) */}
+      <HistoryModal
+        isOpen={isHistoryModalOpen}
+        onClose={() => setIsHistoryModalOpen(false)}
+        historyList={historyList}
+        onDeleteRecord={handleDeleteHistoryRecord}
+        onClearAll={handleClearAllHistory}
+        onGenerateDemo={handleGenerateDemoHistory}
+        onLoadRecordToActiveShift={handleLoadRecordToActiveShift}
+        onApplyAsOpeningMeters={handleApplyAsOpeningMeters}
+        onSaveCurrentShiftNow={handleSaveShiftToHistory}
       />
     </div>
   );

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Trash2, Printer, Share2, Copy, Check, Sparkles, AlertTriangle, X, Camera, FileText } from 'lucide-react';
+import { Trash2, Printer, Share2, Copy, Check, Sparkles, AlertTriangle, X, Camera, FileText, BookmarkCheck, History } from 'lucide-react';
 
 interface ActionToolbarProps {
   onClearForm: () => void;
@@ -7,7 +7,10 @@ interface ActionToolbarProps {
   onCopyWhatsApp: () => void;
   onLoadDemoData: () => void;
   onOpenPhotoModal: (tab?: 'photo' | 'pdf_previous') => void;
+  onSaveToHistory?: () => void;
+  onOpenHistory?: () => void;
   isCopied: boolean;
+  isHistorySaved?: boolean;
 }
 
 export const ActionToolbar: React.FC<ActionToolbarProps> = ({
@@ -16,24 +19,68 @@ export const ActionToolbar: React.FC<ActionToolbarProps> = ({
   onCopyWhatsApp,
   onLoadDemoData,
   onOpenPhotoModal,
+  onSaveToHistory,
+  onOpenHistory,
   isCopied,
+  isHistorySaved = false,
 }) => {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   return (
     <>
       <div className="bg-white border border-slate-200 rounded-2xl shadow-xs p-4 mb-8">
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+        <div className="flex flex-col lg:flex-row items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+            {/* Save to History (30 shifts) */}
+            {onSaveToHistory && (
+              <button
+                id="save-to-history-btn"
+                type="button"
+                onClick={onSaveToHistory}
+                title="Salva este fechamento no histórico local de 30 dias"
+                className={`flex-1 sm:flex-initial text-xs font-bold px-3.5 py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs ${
+                  isHistorySaved
+                    ? 'bg-emerald-600 text-white shadow-emerald-500/20'
+                    : 'bg-amber-500 hover:bg-amber-600 text-white shadow-amber-500/15'
+                }`}
+              >
+                {isHistorySaved ? (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>Salvo no Histórico!</span>
+                  </>
+                ) : (
+                  <>
+                    <BookmarkCheck className="w-4 h-4" />
+                    <span>Salvar no Histórico (30d)</span>
+                  </>
+                )}
+              </button>
+            )}
+
+            {/* Open History Drawer */}
+            {onOpenHistory && (
+              <button
+                id="toolbar-open-history-btn"
+                type="button"
+                onClick={onOpenHistory}
+                title="Visualizar histórico dos últimos 30 fechamentos"
+                className="flex-1 sm:flex-initial text-xs font-bold text-slate-800 bg-slate-100 hover:bg-slate-200 border border-slate-300 px-3.5 py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs"
+              >
+                <History className="w-4 h-4 text-amber-600" />
+                <span>Ver Histórico</span>
+              </button>
+            )}
+
             {/* Import by PDF Previous Shift Button */}
             <button
               id="import-pdf-previous-btn"
               type="button"
               onClick={() => onOpenPhotoModal('pdf_previous')}
               title="Importar PDF ou imagem do fechamento anterior para preencher abertura dos bicos"
-              className="flex-1 sm:flex-initial text-xs font-bold text-slate-800 bg-slate-100 hover:bg-slate-200 border border-slate-300 px-3.5 py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs"
+              className="flex-1 sm:flex-initial text-xs font-medium text-slate-800 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3 py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer"
             >
-              <FileText className="w-4 h-4 text-amber-600" />
+              <FileText className="w-3.5 h-3.5 text-amber-600" />
               <span>Importar PDF Anterior</span>
             </button>
 
@@ -43,9 +90,9 @@ export const ActionToolbar: React.FC<ActionToolbarProps> = ({
               type="button"
               onClick={() => onOpenPhotoModal('photo')}
               title="Tirar foto ou carregar imagem para preenchimento automático via IA"
-              className="flex-1 sm:flex-initial text-xs font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 px-3.5 py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs"
+              className="flex-1 sm:flex-initial text-xs font-medium text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-3 py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer"
             >
-              <Camera className="w-4 h-4 text-amber-600" />
+              <Camera className="w-3.5 h-3.5 text-amber-600" />
               <span>Importar por Foto</span>
             </button>
 
@@ -73,7 +120,7 @@ export const ActionToolbar: React.FC<ActionToolbarProps> = ({
             </button>
           </div>
 
-          <div className="flex items-center gap-2.5 w-full sm:w-auto">
+          <div className="flex items-center gap-2.5 w-full lg:w-auto">
             {/* WhatsApp Copy */}
             <button
               id="copy-whatsapp-btn"

@@ -55,3 +55,15 @@ export interface OverallSummary {
   grandTotal: number;
   byProduct: Record<FuelCode, ProductSummary>;
 }
+
+export interface SavedShiftRecord {
+  id: string; // unique ID
+  savedAt: string; // ISO string when saved
+  shift: ShiftInfo;
+  prices: Record<FuelCode, number>;
+  nozzles: NozzleData[];
+  extraEntries: ExtraEntry[];
+  conference: CashConference;
+  summary: OverallSummary;
+  quebraValor: number; // diferenca entre valor apurado e esperado
+}

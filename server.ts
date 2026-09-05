@@ -208,27 +208,145 @@ FORMATO DE RESPOSTA (retorne ESTRITAMENTE o JSON estruturado abaixo, sem markdow
       }
 
       const rawResponseText = response.text || '{}';
-      // Clean possible markdown code fences if present
-      const cleanJsonText = rawResponseText.replace(/^```json\s*/i, '').replace(/\s*```$/i, '').trim();
+      
+      // Resilient JSON extraction
+      function extractAndParseJSON(raw: string): any {
+        if (!raw || typeof raw !== 'string') throw new Error('Resposta vazia da IA.');
+        let text = raw.trim();
 
-      let parsedData;
-      try {
-        parsedData = JSON.parse(cleanJsonText);
-      } catch (parseErr) {
-        // Fallback: extract json between outermost braces
-        const match = cleanJsonText.match(/\{[\s\S]*\}/);
-        if (match) {
-          parsedData = JSON.parse(match[0]);
-        } else {
-          throw new Error('Não foi possível interpretar a resposta estruturada da IA.');
+        // 1. Direct parse
+        try {
+          return JSON.parse(text);
+        } catch {}
+
+        // 2. Extract from markdown code fences ```json ... ```
+        if (text.includes('```')) {
+          const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+          if (fenceMatch && fenceMatch[1]) {
+            try {
+              return JSON.parse(fenceMatch[1].trim());
+            } catch {}
+          }
         }
+
+        // 3. Extract outermost { ... }
+        const firstBrace = text.indexOf('{');
+        const lastBrace = text.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace > firstBrace) {
+          const jsonSubstring = text.substring(firstBrace, lastBrace + 1);
+          try {
+            return JSON.parse(jsonSubstring);
+          } catch {
+            // Remove trailing commas before closing braces/brackets
+            const fixedJson = jsonSubstring
+              .replace(/,\s*([\]}])/g, '$1')
+              .replace(/(['"])?([a-zA-Z0-9_]+)(['"])?:/g, '"$2":');
+            try {
+              return JSON.parse(fixedJson);
+            } catch {}
+          }
+        }
+
+        throw new Error('Não foi possível interpretar a resposta estruturada da IA.');
+      }
+
+      const parsedData = extractAndParseJSON(rawResponseText);
+
+      // Helper function to clean meter numeric values
+      function cleanMeterValue(val: any): string {
+        if (val === undefined || val === null) return '';
+        let str = String(val).trim().replace(/\s/g, '').replace(/R\$/gi, '');
+        if (!str) return '';
+        if (str.includes('.') && str.includes(',')) {
+          const lastDot = str.lastIndexOf('.');
+          const lastComma = str.lastIndexOf(',');
+          if (lastComma > lastDot) {
+            str = str.replace(/\./g, '').replace(',', '.');
+          } else {
+            str = str.replace(/,/g, '');
+          }
+        } else if (str.includes(',')) {
+          str = str.replace(',', '.');
+        }
+        return str;
+      }
+
+      // Helper function to normalize Brazilian fuel product names
+      function normalizeFuelCode(raw: any): string | null {
+        if (!raw || typeof raw !== 'string') return null;
+        const upper = raw.toUpperCase().trim();
+        if (upper === 'ETANOL' || upper.includes('ALCOOL') || upper.includes('ÁLCOOL') || upper.includes('ETAN') || upper.includes('AEAC') || upper.includes('HIDRATADO')) {
+          return 'ETANOL';
+        }
+        if (upper === 'G_ADIT' || upper.includes('ADIT') || upper.includes('V-POWER') || upper.includes('GRID') || upper.includes('OCTAPRO') || upper.includes('DT CLEAN') || upper.includes('GA')) {
+          return 'G_ADIT';
+        }
+        if (upper === 'G_COM' || upper.includes('GAS') || upper.includes('COMUM') || upper.includes('GC')) {
+          return 'G_COM';
+        }
+        if (upper === 'D_S10' || upper.includes('S10') || upper.includes('S-10') || upper.includes('S 10')) {
+          return 'D_S10';
+        }
+        if (upper === 'D_COM' || upper.includes('S500') || upper.includes('S-500') || upper.includes('DIESEL') || upper.includes('D500')) {
+          return 'D_COM';
+        }
+        return null;
       }
 
       // Sanitize detected nozzles
       if (Array.isArray(parsedData.detectedNozzles)) {
-        parsedData.detectedNozzles = parsedData.detectedNozzles.filter((n: any) => {
-          return n && typeof n.nozzleNumber === 'number' && n.nozzleNumber >= 1 && n.nozzleNumber <= 16;
-        });
+        const sanitizedNozzles: any[] = [];
+        for (const rawNozzle of parsedData.detectedNozzles) {
+          if (!rawNozzle) continue;
+
+          // Extract nozzle number from number or string (e.g. "Bico 01" -> 1)
+          let nozzleNum: number | null = null;
+          if (typeof rawNozzle.nozzleNumber === 'number' && rawNozzle.nozzleNumber >= 1 && rawNozzle.nozzleNumber <= 16) {
+            nozzleNum = rawNozzle.nozzleNumber;
+          } else if (typeof rawNozzle.nozzleNumber === 'string') {
+            const match = rawNozzle.nozzleNumber.match(/\b([1-9]|1[0-6])\b/);
+            if (match) nozzleNum = parseInt(match[1], 10);
+          } else if (typeof rawNozzle.id === 'number' && rawNozzle.id >= 1 && rawNozzle.id <= 16) {
+            nozzleNum = rawNozzle.id;
+          }
+
+          if (nozzleNum && nozzleNum >= 1 && nozzleNum <= 16) {
+            sanitizedNozzles.push({
+              nozzleNumber: nozzleNum,
+              productCode: normalizeFuelCode(rawNozzle.productCode),
+              openingMeter: cleanMeterValue(rawNozzle.openingMeter),
+              closingMeter: cleanMeterValue(rawNozzle.closingMeter),
+              calibrationLiters: cleanMeterValue(rawNozzle.calibrationLiters) || '0',
+              unitPrice: typeof rawNozzle.unitPrice === 'number' ? rawNozzle.unitPrice : parseFloat(cleanMeterValue(rawNozzle.unitPrice)) || undefined,
+            });
+          }
+        }
+        parsedData.detectedNozzles = sanitizedNozzles;
+      } else {
+        parsedData.detectedNozzles = [];
+      }
+
+      // Sanitize extraEntries
+      if (Array.isArray(parsedData.extraEntries)) {
+        parsedData.extraEntries = parsedData.extraEntries
+          .filter((e: any) => e && (e.description || e.value))
+          .map((e: any) => ({
+            description: String(e.description || 'Recolhimento').trim(),
+            value: cleanMeterValue(e.value),
+          }));
+      } else {
+        parsedData.extraEntries = [];
+      }
+
+      // Sanitize financial conference
+      if (parsedData.financialConference && typeof parsedData.financialConference === 'object') {
+        parsedData.financialConference = {
+          cashAmount: cleanMeterValue(parsedData.financialConference.cashAmount),
+          cardsAmount: cleanMeterValue(parsedData.financialConference.cardsAmount),
+          pixAmount: cleanMeterValue(parsedData.financialConference.pixAmount),
+          otherAmount: cleanMeterValue(parsedData.financialConference.otherAmount),
+          notes: parsedData.financialConference.notes ? String(parsedData.financialConference.notes).trim() : '',
+        };
       }
 
       return res.json({

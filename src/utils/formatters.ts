@@ -4,10 +4,47 @@ import { FUEL_PRODUCTS } from '../constants/fuels';
 export function parseNumber(value: string | number | undefined | null): number {
   if (value === undefined || value === null || value === '') return 0;
   if (typeof value === 'number') return isNaN(value) ? 0 : value;
-  // Handle Brazilian decimal comma e.g. "1250,45" or standard dot "1250.45"
-  const cleanStr = value.toString().trim().replace(/\s/g, '').replace(',', '.');
-  const num = parseFloat(cleanStr);
+
+  let str = value.toString().trim().replace(/\s/g, '').replace(/R\$/gi, '');
+  if (!str) return 0;
+
+  // Case 1: Both dot and comma present (e.g., "42.100,50" or "42,100.50")
+  if (str.includes('.') && str.includes(',')) {
+    const lastDotIndex = str.lastIndexOf('.');
+    const lastCommaIndex = str.lastIndexOf(',');
+    if (lastCommaIndex > lastDotIndex) {
+      // Brazilian format: "42.100,50" -> dots are thousands, comma is decimal
+      str = str.replace(/\./g, '').replace(',', '.');
+    } else {
+      // US format: "42,100.50" -> commas are thousands, dot is decimal
+      str = str.replace(/,/g, '');
+    }
+  } else if (str.includes(',')) {
+    // Case 2: Only comma present (e.g., "42100,50" or "4,33") -> comma is decimal
+    str = str.replace(',', '.');
+  }
+
+  const num = parseFloat(str);
   return isNaN(num) ? 0 : num;
+}
+
+export function cleanMeterString(value: string | number | undefined | null): string {
+  if (value === undefined || value === null) return '';
+  let str = value.toString().trim().replace(/\s/g, '').replace(/R\$/gi, '');
+  if (!str) return '';
+
+  if (str.includes('.') && str.includes(',')) {
+    const lastDotIndex = str.lastIndexOf('.');
+    const lastCommaIndex = str.lastIndexOf(',');
+    if (lastCommaIndex > lastDotIndex) {
+      str = str.replace(/\./g, '').replace(',', '.');
+    } else {
+      str = str.replace(/,/g, '');
+    }
+  } else if (str.includes(',')) {
+    str = str.replace(',', '.');
+  }
+  return str;
 }
 
 export function formatCurrency(amount: number): string {
