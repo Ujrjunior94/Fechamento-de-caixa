@@ -8,6 +8,7 @@ import {
   CashConference,
 } from '../types';
 import { FUEL_PRODUCTS } from '../constants/fuels';
+import { WORK_SHIFTS, normalizeShiftType, getShiftBadge } from '../constants/shifts';
 import {
   formatCurrency,
   formatLiters,
@@ -83,7 +84,9 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
         item.shift.date.includes(searchTerm);
 
       const matchesShift =
-        selectedShiftFilter === 'all' || item.shift.shiftType === selectedShiftFilter;
+        selectedShiftFilter === 'all' ||
+        normalizeShiftType(item.shift.shiftType) === selectedShiftFilter ||
+        item.shift.shiftType === selectedShiftFilter;
 
       const matchesDate =
         !selectedDateFilter || item.shift.date === selectedDateFilter;
@@ -288,10 +291,12 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
               className="text-xs px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-700 font-medium"
             >
               <option value="all">Todos os Turnos</option>
-              <option value="Manhã">Manhã</option>
-              <option value="Tarde">Tarde</option>
-              <option value="Noite">Noite</option>
-              <option value="Geral">Geral</option>
+              {WORK_SHIFTS.map((s) => (
+                <option key={s.id} value={s.name}>
+                  {s.label}
+                </option>
+              ))}
+              <option value="Geral">Fechamento Geral</option>
             </select>
 
             {(searchTerm || selectedDateFilter || selectedShiftFilter !== 'all') && (
@@ -363,6 +368,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
 
               const isQuebraNegative = rec.quebraValor < -0.05;
               const isQuebraPositive = rec.quebraValor > 0.05;
+              const shiftBadge = getShiftBadge(rec.shift.shiftType);
 
               return (
                 <div
@@ -373,8 +379,8 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
                     {/* Shift identification info */}
                     <div className="flex items-start gap-3">
                       <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-700 flex flex-col items-center justify-center font-bold shrink-0 border border-slate-200">
-                        <span className="text-[10px] text-slate-400 font-semibold leading-none">
-                          {rec.shift.shiftType.substring(0, 3).toUpperCase()}
+                        <span className="text-[10px] text-slate-500 font-bold leading-none">
+                          {shiftBadge.short}
                         </span>
                         <span className="text-xs text-slate-800 font-bold leading-tight">
                           {formattedDate.split('/')[0]}
@@ -386,8 +392,8 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
                           <span className="text-sm font-bold text-slate-900">
                             {formattedDate}
                           </span>
-                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
-                            {rec.shift.shiftType}
+                          <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md border ${shiftBadge.badgeClass}`}>
+                            {shiftBadge.label}
                           </span>
                           {rec.shift.stationName && (
                             <span className="text-xs text-slate-500 flex items-center gap-1">
@@ -628,8 +634,8 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
               <div>
                 <h3 className="text-base font-bold flex items-center gap-2">
                   <span>Detalhes do Fechamento: {inspectingRecord.shift.date}</span>
-                  <span className="text-xs px-2 py-0.5 rounded-md bg-amber-500 text-slate-900 font-bold">
-                    {inspectingRecord.shift.shiftType}
+                  <span className="text-xs px-2.5 py-0.5 rounded-md bg-amber-500 text-slate-900 font-bold">
+                    {getShiftBadge(inspectingRecord.shift.shiftType).label}
                   </span>
                 </h3>
                 <p className="text-xs text-slate-300 mt-0.5">

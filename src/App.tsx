@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { FuelCode, NozzleData, ExtraEntry, ShiftInfo, CashConference, SavedShiftRecord } from './types';
 import { INITIAL_PRICES, createInitialNozzles } from './constants/fuels';
 import { computeOverallSummary, generateWhatsAppMessage, cleanMeterString } from './utils/formatters';
+import { getCurrentShiftType, normalizeShiftType } from './constants/shifts';
 import {
   getShiftHistory,
   saveShiftToHistory,
@@ -39,7 +40,7 @@ export default function App() {
     return {
       stationName: '',
       cashierName: '',
-      shiftType: 'Manhã',
+      shiftType: getCurrentShiftType(),
       date: today,
     };
   });
@@ -349,7 +350,9 @@ export default function App() {
         stationName: data.stationInfo?.stationName || prev.stationName,
         cashierName: data.stationInfo?.cashierName || prev.cashierName,
         date: data.stationInfo?.date || prev.date,
-        shiftType: (data.stationInfo?.shiftType as any) || prev.shiftType,
+        shiftType: data.stationInfo?.shiftType
+          ? normalizeShiftType(data.stationInfo.shiftType)
+          : prev.shiftType,
       }));
     }
 

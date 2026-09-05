@@ -1,4 +1,4 @@
-import { SavedShiftRecord, ShiftInfo, FuelCode, NozzleData, ExtraEntry, CashConference, OverallSummary } from '../types';
+import { SavedShiftRecord, ShiftInfo, ShiftType, FuelCode, NozzleData, ExtraEntry, CashConference, OverallSummary } from '../types';
 import { INITIAL_PRICES, createInitialNozzles } from '../constants/fuels';
 import { computeOverallSummary } from './formatters';
 
@@ -106,7 +106,12 @@ export function clearAllHistory(): void {
 export function generateDemoHistory(): SavedShiftRecord[] {
   const demoList: SavedShiftRecord[] = [];
   const cashiers = ['Carlos Silva', 'José Oliveira', 'Marcos Santos', 'Ana Paula Souza', 'Roberto Lima'];
-  const shiftTypes: Array<'Manhã' | 'Tarde' | 'Noite'> = ['Manhã', 'Tarde', 'Noite'];
+  const shiftTypes: ShiftType[] = [
+    'Turno 1 (00:00 às 06:00)',
+    'Turno 2 (06:00 às 14:00)',
+    'Turno 3 (14:00 às 22:00)',
+    'Turno 4 (22:00 às 00:00)',
+  ];
 
   const now = new Date();
 

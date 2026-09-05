@@ -4,6 +4,9 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
+import * as pdfParseModule from 'pdf-parse';
+
+const pdfParse: any = (pdfParseModule as any).default || pdfParseModule;
 
 dotenv.config();
 
@@ -14,9 +17,9 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  // Increase payload limit for smartphone photos
-  app.use(express.json({ limit: '25mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '25mb' }));
+  // Increase payload limit for smartphone photos and high-resolution PDF documents
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
   // Favicon handler to avoid 404s
   app.get('/favicon.ico', (req, res) => {
@@ -64,20 +67,25 @@ async function startServer() {
       });
 
       // Clean base64 data prefix and detect MIME type
-      let determinedMimeType = rawMimeType || 'image/jpeg';
-      let cleanedBase64 = inputBase64;
+      let determinedMimeType = (rawMimeType || '').toLowerCase();
+      let cleanedBase64 = String(inputBase64);
 
-      if (inputBase64.startsWith('data:')) {
-        const mimeMatch = inputBase64.match(/^data:([^;]+);base64,/);
+      if (cleanedBase64.startsWith('data:')) {
+        const mimeMatch = cleanedBase64.match(/^data:([^;]+);base64,/i);
         if (mimeMatch && mimeMatch[1]) {
           determinedMimeType = mimeMatch[1].toLowerCase();
         }
-        cleanedBase64 = inputBase64.replace(/^data:[^;]+;base64,/, '');
+        cleanedBase64 = cleanedBase64.replace(/^data:[^;]+;base64,/i, '');
       }
+
+      // Remove any trailing or internal whitespace/newlines that might corrupt base64
+      cleanedBase64 = cleanedBase64.replace(/[\r\n\s]+/g, '');
 
       // Ensure valid MIME type for Gemini
       let finalMimeType = 'image/jpeg';
-      if (determinedMimeType.includes('pdf')) {
+      const isPdf = determinedMimeType.includes('pdf') || (rawMimeType && rawMimeType.toLowerCase().includes('pdf'));
+
+      if (isPdf) {
         finalMimeType = 'application/pdf';
       } else if (determinedMimeType.includes('png')) {
         finalMimeType = 'image/png';
@@ -87,6 +95,23 @@ async function startServer() {
         finalMimeType = 'image/gif';
       } else if (determinedMimeType.startsWith('image/')) {
         finalMimeType = determinedMimeType;
+      }
+
+      // If PDF, extract embedded text via pdf-parse to guarantee 100% extraction for digital PDFs
+      let extractedPdfText = '';
+      if (isPdf) {
+        try {
+          const pdfBuffer = Buffer.from(cleanedBase64, 'base64');
+          if (pdfBuffer && pdfBuffer.length > 0) {
+            const parsedPdf = await pdfParse(pdfBuffer);
+            if (parsedPdf && parsedPdf.text && parsedPdf.text.trim().length > 5) {
+              extractedPdfText = parsedPdf.text.trim();
+              console.log(`PDF parse extraiu ${extractedPdfText.length} caracteres de texto do PDF.`);
+            }
+          }
+        } catch (pdfErr: any) {
+          console.warn('Nota sobre extração direta de texto do PDF (possível PDF escaneado/imagem):', pdfErr?.message || pdfErr);
+        }
       }
 
       const prompt = `Você é um assistente especialista de alta precisão em leitura e auditoria de fechamento de caixa de postos de combustíveis no Brasil.
@@ -127,7 +152,7 @@ REGRAS DE EXTRAÇÃO:
    - "stationName": Nome do posto ou bandeira (ex: "Posto Petrobras", "Posto Ipiranga", "Auto Posto...") ou null
    - "cashierName": Nome do frentista, operador de pista ou caixa (ou null)
    - "date": Data no formato "YYYY-MM-DD" (ex: "2026-09-05") ou null
-   - "shiftType": "Manhã", "Tarde", "Noite" ou "Geral" (ou null)
+   - "shiftType": "Turno 1 (00:00 às 06:00)", "Turno 2 (06:00 às 14:00)", "Turno 3 (14:00 às 22:00)", "Turno 4 (22:00 às 00:00)" ou "Geral" (ou null se não indicado)
 
 5. "financialConference": Valores da apuração financeira se declarados na folha:
    - "cashAmount": Dinheiro em espécie contado na gaveta (string numérica limpa)
@@ -168,6 +193,11 @@ FORMATO DE RESPOSTA (retorne ESTRITAMENTE o JSON estruturado abaixo, sem markdow
   "observations": "string"
 }`;
 
+      let finalPrompt = prompt;
+      if (extractedPdfText) {
+        finalPrompt += `\n\n[CONTEÚDO TEXTUAL EXTRAÍDO AUTOMATICAMENTE DO PDF]:\n${extractedPdfText.slice(0, 35000)}`;
+      }
+
       const filePart = {
         inlineData: {
           mimeType: finalMimeType,
@@ -188,7 +218,7 @@ FORMATO DE RESPOSTA (retorne ESTRITAMENTE o JSON estruturado abaixo, sem markdow
             contents: [
               {
                 role: 'user',
-                parts: [filePart, { text: prompt }],
+                parts: [filePart, { text: finalPrompt }],
               },
             ],
             config: {
@@ -202,6 +232,32 @@ FORMATO DE RESPOSTA (retorne ESTRITAMENTE o JSON estruturado abaixo, sem markdow
         } catch (callErr: any) {
           lastError = callErr;
           console.warn(`Tentativa com modelo ${modelName} falhou:`, callErr?.message || callErr);
+
+          // If the multimodal inlineData failed on PDF and we have extracted text, try pure text prompt
+          if (isPdf && extractedPdfText && attempt === modelsToTry.length - 1) {
+            try {
+              console.log('Tentando fallback com prompt de texto puro extraído do PDF...');
+              response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: [
+                  {
+                    role: 'user',
+                    parts: [{ text: finalPrompt }],
+                  },
+                ],
+                config: {
+                  responseMimeType: 'application/json',
+                  temperature: 0.0,
+                },
+              });
+              if (response && response.text) {
+                break;
+              }
+            } catch (txtErr) {
+              console.warn('Fallback de texto puro também falhou:', txtErr);
+            }
+          }
+
           if (attempt < modelsToTry.length - 1) {
             await new Promise((resolve) => setTimeout(resolve, 800));
           }
@@ -389,6 +445,25 @@ FORMATO DE RESPOSTA (retorne ESTRITAMENTE o JSON estruturado abaixo, sem markdow
           otherAmount: cleanMeterValue(parsedData.financialConference.otherAmount),
           notes: parsedData.financialConference.notes ? String(parsedData.financialConference.notes).trim() : '',
         };
+      }
+
+      // Sanitize stationInfo shiftType
+      if (parsedData.stationInfo && typeof parsedData.stationInfo === 'object') {
+        const rawShift = parsedData.stationInfo.shiftType;
+        if (typeof rawShift === 'string') {
+          const lower = rawShift.toLowerCase();
+          if (lower.includes('1') || lower.includes('00:00') || lower.includes('00h') || lower.includes('madrugada')) {
+            parsedData.stationInfo.shiftType = 'Turno 1 (00:00 às 06:00)';
+          } else if (lower.includes('2') || lower.includes('06:00') || lower.includes('06h') || lower.includes('manhã') || lower.includes('manha')) {
+            parsedData.stationInfo.shiftType = 'Turno 2 (06:00 às 14:00)';
+          } else if (lower.includes('3') || lower.includes('14:00') || lower.includes('14h') || lower.includes('tarde')) {
+            parsedData.stationInfo.shiftType = 'Turno 3 (14:00 às 22:00)';
+          } else if (lower.includes('4') || lower.includes('22:00') || lower.includes('22h') || lower.includes('noite')) {
+            parsedData.stationInfo.shiftType = 'Turno 4 (22:00 às 00:00)';
+          } else if (lower.includes('geral') || lower.includes('24h')) {
+            parsedData.stationInfo.shiftType = 'Geral';
+          }
+        }
       }
 
       return res.json({

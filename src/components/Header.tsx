@@ -1,6 +1,7 @@
 import React from 'react';
 import { Fuel, Calendar, Clock, User, Building, CheckCircle2, Camera, FileText, History } from 'lucide-react';
 import { ShiftInfo } from '../types';
+import { WORK_SHIFTS, normalizeShiftType } from '../constants/shifts';
 
 interface HeaderProps {
   shift: ShiftInfo;
@@ -142,13 +143,15 @@ export const Header: React.FC<HeaderProps> = ({
           </label>
           <select
             id="shift-type-select"
-            value={shift.shiftType}
+            value={normalizeShiftType(shift.shiftType)}
             onChange={(e) => onUpdateShift('shiftType', e.target.value as any)}
-            className="w-full text-sm px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 focus:bg-white transition-colors"
+            className="w-full text-sm px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 focus:bg-white transition-colors font-medium text-slate-800"
           >
-            <option value="Manhã">Turno 1 (Manhã: 06h às 14h)</option>
-            <option value="Tarde">Turno 2 (Tarde: 14h às 22h)</option>
-            <option value="Noite">Turno 3 (Noite: 22h às 06h)</option>
+            {WORK_SHIFTS.map((s) => (
+              <option key={s.id} value={s.name}>
+                {s.label}
+              </option>
+            ))}
             <option value="Geral">Fechamento Geral / 24h</option>
           </select>
         </div>

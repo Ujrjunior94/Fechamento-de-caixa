@@ -35,10 +35,24 @@ export interface CashConference {
   notes: string; // Observações do Caixa
 }
 
+export type ShiftType =
+  | 'Turno 1 (00:00 às 06:00)'
+  | 'Turno 2 (06:00 às 14:00)'
+  | 'Turno 3 (14:00 às 22:00)'
+  | 'Turno 4 (22:00 às 00:00)'
+  | 'Turno 1'
+  | 'Turno 2'
+  | 'Turno 3'
+  | 'Turno 4'
+  | 'Manhã'
+  | 'Tarde'
+  | 'Noite'
+  | 'Geral';
+
 export interface ShiftInfo {
   stationName: string;
   cashierName: string;
-  shiftType: 'Manhã' | 'Tarde' | 'Noite' | 'Geral';
+  shiftType: ShiftType;
   date: string;
 }
 

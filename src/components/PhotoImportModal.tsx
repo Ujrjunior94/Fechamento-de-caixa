@@ -73,9 +73,17 @@ const formatFileSize = (bytes: number): string => {
 
 // Helper to safely optimize image files, falling back smoothly to raw data if needed
 const processSelectedFile = (file: File): Promise<LoadedFileInfo> => {
-  return new Promise((resolve) => {
-    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+  return new Promise((resolve, reject) => {
+    const isPdf =
+      file.type === 'application/pdf' ||
+      file.name.toLowerCase().endsWith('.pdf') ||
+      file.type.includes('pdf');
     const sizeFormatted = formatFileSize(file.size);
+
+    if (file.size > 45 * 1024 * 1024) {
+      reject(new Error('O arquivo excede o limite de 45 MB. Selecione um documento menor.'));
+      return;
+    }
 
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -164,13 +172,7 @@ const processSelectedFile = (file: File): Promise<LoadedFileInfo> => {
     };
 
     reader.onerror = () => {
-      resolve({
-        name: file.name,
-        sizeFormatted,
-        isPdf,
-        dataUrl: '',
-        mimeType: file.type || (isPdf ? 'application/pdf' : 'image/jpeg'),
-      });
+      reject(new Error('Falha ao ler o arquivo no navegador. Tente selecionar novamente.'));
     };
 
     reader.readAsDataURL(file);
@@ -191,6 +193,7 @@ export const PhotoImportModal: React.FC<PhotoImportModalProps> = ({
   const [parsedResult, setParsedResult] = useState<any | null>(null);
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
   // Application mode selection
   const [applyMode, setApplyMode] = useState<
@@ -303,6 +306,46 @@ export const PhotoImportModal: React.FC<PhotoImportModalProps> = ({
       setIsOptimizing(false);
       // reset file input so the same file can be selected again if needed
       e.target.value = '';
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+
+    setIsOptimizing(true);
+    setErrorMsg(null);
+    try {
+      const processed = await processSelectedFile(file);
+      if (!processed.dataUrl) {
+        throw new Error('Falha ao ler o conteúdo do arquivo.');
+      }
+      setLoadedFile(processed);
+      setParsedResult(null);
+
+      if (processed.isPdf || activeTab === 'pdf_previous') {
+        setApplyMode('previous_shift_transition');
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Não foi possível carregar o arquivo solto.');
+    } finally {
+      setIsOptimizing(false);
     }
   };
 
@@ -730,14 +773,14 @@ export const PhotoImportModal: React.FC<PhotoImportModalProps> = ({
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*,application/pdf"
+            accept="image/*,application/pdf,.pdf"
             onChange={handleFileSelect}
             className="hidden"
           />
           <input
             ref={pdfInputRef}
             type="file"
-            accept="application/pdf"
+            accept="application/pdf,.pdf"
             onChange={handleFileSelect}
             className="hidden"
           />
@@ -752,8 +795,23 @@ export const PhotoImportModal: React.FC<PhotoImportModalProps> = ({
 
           {/* Upload Dropzone / Action Selector */}
           {!isCameraActive && !loadedFile && (
-            <div className="border-2 border-dashed border-slate-300 rounded-2xl p-6 text-center hover:border-amber-400 bg-slate-50/50 transition-colors">
-              <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mb-3">
+            <div
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              className={`border-2 border-dashed rounded-2xl p-6 text-center transition-all ${
+                isDragging
+                  ? 'border-amber-500 bg-amber-50/70 scale-[1.01] shadow-md'
+                  : 'border-slate-300 hover:border-amber-400 bg-slate-50/50'
+              }`}
+            >
+              <div
+                className={`w-14 h-14 mx-auto rounded-2xl flex items-center justify-center mb-3 transition-colors ${
+                  isDragging
+                    ? 'bg-amber-500 text-white animate-bounce'
+                    : 'bg-amber-100 text-amber-700'
+                }`}
+              >
                 {activeTab === 'pdf_previous' ? (
                   <FileSpreadsheet className="w-7 h-7" />
                 ) : (
@@ -761,14 +819,16 @@ export const PhotoImportModal: React.FC<PhotoImportModalProps> = ({
                 )}
               </div>
               <h3 className="text-sm font-bold text-slate-800 mb-1">
-                {activeTab === 'pdf_previous'
-                  ? 'Selecione o PDF ou Foto do Fechamento Anterior'
-                  : 'Escolha como deseja importar a foto ou documento'}
+                {isDragging
+                  ? 'Solte o arquivo PDF ou Foto aqui!'
+                  : activeTab === 'pdf_previous'
+                  ? 'Selecione ou Arraste o PDF do Fechamento Anterior'
+                  : 'Escolha ou Arraste a foto ou documento PDF'}
               </h3>
               <p className="text-xs text-slate-500 max-w-md mx-auto mb-4">
                 {activeTab === 'pdf_previous'
                   ? 'Formatos aceitos: PDF (.pdf), Fotos da folha anterior (.jpg, .png, .webp).'
-                  : 'Tire uma foto na hora com a câmera ou anexe imagem/PDF da galeria ou computador.'}
+                  : 'Arraste o arquivo para cá, tire uma foto na hora com a câmera ou anexe da galeria.'}
               </p>
 
               <div className="flex flex-wrap items-center justify-center gap-2.5">
