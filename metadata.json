@@ -1,0 +1,8 @@
+{
+  "name": "Fechamento de Caixa - Posto",
+  "description": "Web App para fechamento de caixa de posto de combustíveis com leitura dos bicos 01 a 16, conferência de dinheiro e cartões, cálculo de quebra de caixa e importação por foto.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
